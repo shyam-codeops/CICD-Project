@@ -1,4 +1,4 @@
-# Sample CI/CD Project
+# CI/CD Project
 
 This repository demonstrates a basic CI/CD pipeline using Git and Azure DevOps.
 
@@ -10,3 +10,8 @@ This repository demonstrates a basic CI/CD pipeline using Git and Azure DevOps.
 - Basic project structure
 
 ## Repository Structure
+
+
+## Purpose
+
+This project is created for learning and demonstrating Continuous Integration and Continuous Deployment (CI/CD) concepts.
