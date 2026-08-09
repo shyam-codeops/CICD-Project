@@ -31,15 +31,18 @@ jobs:
   # Terraform CI
   # ==========================================
   terraform-ci:
-    name: Terraform CI
+    name: Terraform CI - ${{ matrix.environment }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [preprod, prod]
 
     # Do not run this job for the "closed" PR event
     if: github.event_name != 'pull_request_target'
 
     defaults:
       run:
-        working-directory: environments
+        working-directory: environments/${{ matrix.environment }}
 
     steps:
 
@@ -77,8 +80,11 @@ jobs:
   # Terraform Apply after PR Merge
   # ==========================================
   terraform-apply:
-    name: Terraform Apply
+    name: Terraform Apply - ${{ matrix.environment }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [preprod, prod]
 
     if: >
       github.event_name == 'pull_request_target' &&
@@ -86,7 +92,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: environments
+        working-directory: environments/${{ matrix.environment }}
 
     steps:
 
