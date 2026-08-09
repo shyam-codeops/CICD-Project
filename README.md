@@ -21,4 +21,4 @@ This project is created for learning and demonstrating Continuous Integration an
 - Git
 - Azure DevOps
 - Visual Studio Code
-- Basic knowledge of CI/CD
+- Knowledge of CI/CD
