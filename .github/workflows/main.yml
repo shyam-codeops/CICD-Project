@@ -1,7 +1,24 @@
 name: Terraform CI/CD
 
 on:
+  # Run CI when any non-main branch is updated
   push:
+    branches-ignore:
+      - main
+
+  # Run CI when PR is opened, updated, or reopened
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+
+  # Run full pipeline when PR is merged into main
+  pull_request_target:
+    types:
+      - closed
     branches:
       - main
 
@@ -9,13 +26,23 @@ permissions:
   contents: read
 
 jobs:
-  terraform:
-    name: Terraform
+
+  # ==========================================
+  # Terraform CI
+  # ==========================================
+  terraform-ci:
+    name: Terraform CI - ${{ matrix.environment }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [preprod, prod]
+
+    # Do not run this job for the "closed" PR event
+    if: github.event_name != 'pull_request_target'
 
     defaults:
       run:
-        working-directory: environments/dev
+        working-directory: environments/${{ matrix.environment }}
 
     steps:
 
@@ -46,7 +73,59 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -out=tfplan
+        run: terraform plan
+
+
+  # ==========================================
+  # Terraform Apply after PR Merge
+  # ==========================================
+  terraform-apply:
+    name: Terraform Apply - ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [preprod, prod]
+
+    if: >
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.merged == true
+
+    defaults:
+      run:
+        working-directory: environments/${{ matrix.environment }}
+
+    steps:
+
+      - name: Checkout Main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+            }
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve
