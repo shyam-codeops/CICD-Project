@@ -2,25 +2,27 @@ name: Terraform CI/CD
 
 on:
   # Run CI when any non-main branch is updated
-  push:
-    branches-ignore:
-      - main
+  # push:
+  #   branches-ignore:
+  #     - main
 
-  # Run CI when PR is opened, updated, or reopened
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-    branches:
-      - main
+  # # Run CI when PR is opened, updated, or reopened
+  # pull_request:
+  #   types:
+  #     - opened
+  #     - synchronize
+  #     - reopened
+  #   branches:
+  #     - main
 
-  # Run full pipeline when PR is merged into main
-  pull_request_target:
-    types:
-      - closed
-    branches:
-      - main
+  # # Run full pipeline when PR is merged into main
+  # pull_request_target:
+  #   types:
+  #     - closed
+  #   branches:
+  #     - main
+
+    workflow_dispatch:
 
 permissions:
   contents: read
