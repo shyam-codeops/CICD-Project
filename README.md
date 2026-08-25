@@ -131,7 +131,7 @@ This repository is part of my **hands-on DevOps learning journey** and is intend
 
 ## 🔮 Future Enhancements
 
-Planned improvements may include:
+Planned improvements may include:-
 
 * Multi-stage Azure DevOps pipelines
 * Separate Dev, QA, and Production environments
