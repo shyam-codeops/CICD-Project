@@ -1,0 +1,327 @@
+trigger: none
+#  branches:
+#    include:
+#      - main
+#      - feature/*
+
+ 
+pool: 
+ name: mypoolutk
+
+
+variables: 
+  workingdir: '$(Build.SourcesDirectory)/environments'
+  
+  
+parameters:
+  - name: env
+    displayName: "Which environment?"
+    type: string
+    default: dev
+    values:
+      - qa
+      - dev
+      - uat
+      - prod
+  - name: runAll
+    displayName: 'Run all stages'
+    type: boolean
+    default: true
+
+  - name: checkov
+    displayName: 'checkov'
+    type: boolean
+    default: false
+
+  - name: Tflint
+    displayName: 'Tflint'
+    type: boolean
+    default: false
+
+  - name: Trivy
+    displayName: 'Trivy'
+    type: boolean
+    default: false
+
+  - name: Gitleaks
+    displayName: 'Gitleaks'
+    type: boolean
+    default: false
+
+  - name: Terraform_init_validate_plan
+    displayName: 'Terraform_init_validate_plan'
+    type: boolean
+    default: false
+
+  - name: Infracost
+    displayName: 'Infracost'
+    type: boolean
+    default: false
+
+  - name: Apply
+    displayName: 'Apply'
+    type: boolean
+    default: false
+
+
+
+  
+
+
+  
+
+
+stages: 
+ - stage: checkov_stage 
+   
+
+   displayName: Mycheckovstage
+   dependsOn: []
+   condition: |
+    or(
+     ${{parameters.runAll}},
+     ${{parameters.checkov}}
+     )
+
+
+   jobs:
+     - job: checkov_job
+       steps:
+         - script: |
+            checkov --version
+            checkov -d .
+           workingDirectory: $(workingdir)/${{parameters.env}}
+ - stage: Tflint_stage
+   condition: |
+       or(
+       ${{parameters.runAll}},
+       ${{parameters.Tflint}}
+       )
+
+  #  dependsOn: checkov_stage
+   dependsOn: []
+   displayName: MyTflint_stage
+   jobs:
+     - job: tflintjob
+       steps:
+         - script: |
+            echo Checking TFLint installation
+            tflint --version
+            echo Initializing TFLint plugins
+            tflint --init
+
+            echo Running Terraform lint scan
+            tflint
+           workingDirectory: '$(workingdir)/${{ parameters.env }}'
+           displayName: Run Tflint
+ - stage: Trivy_stage
+  #  dependsOn: Tflint_stage
+   condition: |
+    or(
+      ${{parameters.runAll}},
+      ${{parameters.Trivy}}
+       )
+   displayName: trivykastage
+   dependsOn: []
+   jobs:
+     - job: Trivyjob
+       steps:
+         - script: |
+            echo Checking Trivy installation
+            trivy --version
+
+            echo Running Terraform IaC security scan
+            trivy config --severity HIGH,CRITICAL --exit-code 1 .
+
+            echo Running secret scan
+            trivy fs --scanners secret --severity HIGH,CRITICAL --exit-code 1 .
+           workingDirectory: '$(workingdir)/${{ parameters.env }}'
+           displayName: Run Trivy Scan
+  
+
+
+
+       
+       
+
+
+ - stage: Gitleak_stage
+  #  dependsOn: Trivy_stage
+   condition: |
+    or(
+     ${{parameters.runAll}},
+     ${{parameters.Gitleaks}}
+     )
+   displayName: GitleakKaastage
+   dependsOn: []
+   jobs:
+     - job: Gitleakijob
+       steps: 
+        - task: PowerShell@2
+          displayName: Gitleaks_Secret Scan
+          inputs:
+             targetType: inline
+             script: |
+               Write-Host "Checking Gitleaks installation"
+
+               $gitleaks = (Get-Command gitleaks.exe -ErrorAction SilentlyContinue).Source
+
+               if (-not $gitleaks) {
+                 $candidates = @(
+                   "C:\Tools\gitleaks.exe",
+                   "$env:USERPROFILE\gitleaks.exe"
+                 )
+
+                 foreach ($path in $candidates) {
+                   if (Test-Path $path) {
+                     $gitleaks = $path
+                     break
+                   }
+                 }
+               }
+
+               if (-not $gitleaks) {
+                 throw "Gitleaks not found. Add its installation directory to the agent PATH or configure its full executable path."
+               }
+
+               Write-Host "Using Gitleaks at: $gitleaks"
+               & $gitleaks version
+
+               Write-Host "Scanning repository and Git history"
+               & $gitleaks git "$(Build.SourcesDirectory)" --redact --exit-code 1
+
+               if ($LASTEXITCODE -ne 0) {
+                 exit $LASTEXITCODE
+               }
+
+
+ - stage: Terraform_init_validate
+   dependsOn: Infracost_stage
+   condition: |
+    or(
+     ${{parameters.runAll}},
+     ${{parameters.Terraform_init_validate_plan}}
+     )
+  #  dependsOn: Gitleak_stage
+   jobs:
+     - job: Terraform_init
+       steps: 
+       - task: TerraformTask@5
+         inputs:
+           provider: 'azurerm'
+           command: 'init'
+           workingDirectory: '$(workingdir)/${{ parameters.env }}'
+           backendServiceArm: 'myutkapp'
+           backendAzureRmOverrideSubscriptionID: '16051492-522e-4748-b729-f7e546bd8b0d'
+           backendAzureRmResourceGroupName: 'myStgRg'
+           backendAzureRmStorageAccountName: 'myutkpipelinestgaccnt'
+           backendAzureRmContainerName: 'myblob'
+           backendAzureRmKey: 'myterraform.tfstate'
+
+       - task: TerraformTask@5
+         inputs:
+           provider: 'azurerm'
+           command: 'validate'
+           workingDirectory: '$(workingdir)/${{ parameters.env }}'
+
+       - task: TerraformTask@5
+         inputs:
+            provider: 'azurerm'
+            command: 'plan'
+            workingDirectory: '$(workingdir)/${{ parameters.env }}'
+            environmentServiceNameAzureRM: 'myutkapp'
+            environmentAzureRmOverrideSubscriptionID: '16051492-522e-4748-b729-f7e546bd8b0d'
+
+
+ - stage: Infracost_stage
+  
+  #  dependsOn: Terraform_init_validate
+   condition: |
+     or(
+     ${{parameters.runAll}},
+     ${{parameters.Infracost}}
+     )
+   dependsOn: []
+   jobs:
+     - job: infracostjob
+       steps:
+        - checkout: self
+
+        - task: PowerShell@2
+          displayName: Run Infracost
+          inputs:
+            targetType: inline
+            script: |
+              Write-Host "Checking Infracost version..."
+              infracost --version
+
+              if ($LASTEXITCODE -ne 0) {
+                throw "Infracost is unavailable."
+              }
+
+              Write-Host "Estimating Terraform costs..."
+              infracost breakdown --path .
+
+              if ($LASTEXITCODE -ne 0) {
+                throw "Infracost estimation failed."
+              }
+          env:
+            INFRACOST_API_KEY: $(INFRACOST_API_KEY)
+            workingDirectory: '$(workingdir)/${{ parameters.env }}'
+
+
+
+
+ - stage: Manuel_Validation
+   dependsOn: Terraform_init_validate
+   jobs:
+     - job: ManuelValidation_Job
+       pool: server
+       steps: 
+       - task: ManualValidation@1
+         inputs:
+           notifyUsers: 'utk@gmail.com'
+
+
+ - stage: Apply
+   dependsOn: Manuel_Validation
+   condition: |
+     and(
+      succeeded(),
+      eq(variables['Build.SourceBranch'], 'refs/heads/main'),
+      or(
+        ${{ parameters.runAll }},
+        ${{ parameters.Apply }}
+      )
+     )
+   jobs:
+     - job: TerraformApplyJob
+       steps: 
+       - task: TerraformTask@5
+         inputs:
+           provider: 'azurerm'
+           command: 'init'
+           workingDirectory: '$(workingdir)/${{ parameters.env }}'
+           backendServiceArm: 'myutkapp'
+           backendAzureRmOverrideSubscriptionID: '16051492-522e-4748-b729-f7e546bd8b0d'
+           backendAzureRmResourceGroupName: 'myStgRg'
+           backendAzureRmStorageAccountName: 'myutkpipelinestgaccnt'
+           backendAzureRmContainerName: 'myblob'
+           backendAzureRmKey: 'myterraform.tfstate'
+
+       - task: TerraformTask@5
+         inputs:
+           provider: 'azurerm'
+           command: 'apply'
+           workingDirectory: '$(workingdir)/${{ parameters.env }}'
+           environmentServiceNameAzureRM: 'myutkapp'
+           environmentAzureRmOverrideSubscriptionID: '16051492-522e-4748-b729-f7e546bd8b0d'
+      
+
+
+     
+
+
+
+
+
